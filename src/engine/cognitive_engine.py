@@ -94,9 +94,13 @@ class CognitiveEngine:
             aff_field = self.parser.agent_config.get("affirmation_field", "affirmation")
             aff_skip = self.parser.agent_config.get("affirmation_skip_slot", "")
             aff_val = self.slots.get(aff_field, "unknown")
-            if aff_val != "unknown" and op.affected_slot and op.affected_slot != aff_skip:
-                self.slots[op.affected_slot] = aff_val
-                self.slots[aff_field] = "unknown"
+            
+            if aff_val != "unknown":
+                logging.debug(f"Handling affirmation: {aff_val}")
+                if op.affected_slot and op.affected_slot != aff_skip:
+                    self.slots[op.affected_slot] = aff_val
+                    self.slots[aff_field] = "unknown"
+                    logging.debug(f"Mapped affirmation to slot: {op.affected_slot}")
 
         # Impasse Detection: Did we actually change anything?
         # Only check against slots that are NOT impasse-count
@@ -105,11 +109,16 @@ class CognitiveEngine:
             if k == 'impasse-count':
                 continue
             if self.slots[k] != old_slots.get(k):
+                logging.debug(f"State Changed: Slot '{k}' from '{old_slots.get(k)}' to '{self.slots[k]}'")
                 state_changed = True
                 break
         
         if not state_changed:
-            current_impasse = int(self.slots.get('impasse-count', 0))
+            logging.debug("No state change detected, incrementing impasse.")
+            try:
+                current_impasse = int(self.slots.get('impasse-count', 0))
+            except (ValueError, TypeError):
+                current_impasse = 0
             self.slots['impasse-count'] = str(current_impasse + 1)
         else:
             self.slots['impasse-count'] = '0'

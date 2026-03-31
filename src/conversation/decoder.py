@@ -1,10 +1,29 @@
 import os
 import json
 import logging
-from openai import OpenAI
-from pydantic import BaseModel
+import dspy
+import re
+from typing import Dict, List, Optional, Type
+from pydantic import BaseModel, Field
 from dotenv import load_dotenv
+
 load_dotenv()
+
+# Define the DSPy Signature with 'state' for short-term memory
+class ExtractJSON(dspy.Signature):
+    """
+    You are a precise data extraction assistant for a Smart Home AI.
+    Given a user message, the current conversation state, and a target JSON schema, 
+    you must extract the fields accurately while maintaining consistency with the current state.
+    Respond ONLY with the raw JSON object.
+    """
+    context = dspy.InputField(desc="The system personality.")
+    state = dspy.InputField(desc="Current filled slots/working memory.")
+    instruction = dspy.InputField(desc="Specific extraction instructions.")
+    schema = dspy.InputField(desc="The required JSON schema.")
+    user_input = dspy.InputField(desc="The user message to process.")
+    
+    output = dspy.OutputField(desc="A valid JSON object matching the schema.")
 
 class GenericClassifier:
     def __init__(self, parser, models_module):
@@ -17,72 +36,116 @@ class GenericClassifier:
                 self.instructions[slot.utterance_type] = slot.instructions
 
         self.api_key = os.getenv("NVIDIA_API_KEY", "")
-        if not self.api_key:
-            logging.warning("NVIDIA_API_KEY is not set.")
-
-        self.client = OpenAI(
-            base_url="https://integrate.api.nvidia.com/v1",
-            api_key=self.api_key
+        self.model_name = self.parser.agent_config.get("llm_model", "microsoft/phi-3.5-mini-instruct")
+        
+        # Configure DSPy LM
+        self.lm = dspy.LM(
+            model=f"openai/{self.model_name}",
+            api_base="https://integrate.api.nvidia.com/v1",
+            api_key=self.api_key,
+            temperature=0.0,
+            max_tokens=2048,
+            cache=False
         )
-        self.model = self.parser.agent_config.get("llm_model", "nvidia/glm-4-9b-chat")
+        dspy.settings.configure(lm=self.lm)
+        
+        # The Predictor
+        self.predictor = dspy.Predict(ExtractJSON)
+        
+        # Bootstrap with examples that include 'state'
+        self._add_routing_examples()
+
+    def _add_routing_examples(self):
+        """Add few-shot examples showing how to use the 'state' to avoid drift."""
+        routing_schema = "{\"properties\": {\"conversation_category\": {\"enum\": [\"task_related\", \"greeting\", \"help_request\", \"off_topic\", \"unknown\"], \"type\": \"string\"}, \"affirmation\": {\"enum\": [\"confirmed\", \"declined\", \"unknown\"], \"type\": \"string\"}}, \"type\": \"object\"}"
+        
+        examples = [
+            dspy.Example(
+                context="Smart home assistant",
+                state="{}",
+                instruction="Classify the message.",
+                schema=routing_schema,
+                user_input="I want to set up some lights",
+                output='{"conversation_category": "task_related", "affirmation": "unknown"}'
+            ).with_inputs("context", "state", "instruction", "schema", "user_input"),
+            dspy.Example(
+                context="Smart home assistant",
+                state="{'intent': 'configure-lighting'}",
+                instruction="Classify the message.",
+                schema=routing_schema,
+                user_input="Yes, that is correct",
+                output='{"conversation_category": "unknown", "affirmation": "confirmed"}'
+            ).with_inputs("context", "state", "instruction", "schema", "user_input"),
+             dspy.Example(
+                context="Smart home assistant",
+                state="{'intent': 'configure-lighting', 'room': 'living-room'}",
+                instruction="Classify the message.",
+                schema=routing_schema,
+                user_input="I'd like it to be reactive",
+                output='{"conversation_category": "task_related", "affirmation": "unknown"}'
+            ).with_inputs("context", "state", "instruction", "schema", "user_input")
+        ]
+        
+        self.predictor.demos = examples
 
     def classify(self, user_input: str, utterance_type: str, slots_to_extract: list, slot_values: dict = None) -> dict:
         if utterance_type not in self.models_module.MODELS:
             raise ValueError(f"No generated model for: {utterance_type}")
 
         ModelClass = self.models_module.MODELS[utterance_type]
-        system_instruction = self.instructions.get(utterance_type, "Extract the properties.")
-        agent_context = self.parser.agent_config.get('llm_prompt_context', '')
-
-        schema = ModelClass.model_json_schema()
+        system_instruction = self.instructions.get(utterance_type, "Extract the requested properties accurately.")
+        agent_context = self.parser.agent_config.get('llm_prompt_context', 'You are a smart home assistant.')
+        schema_json = json.dumps(ModelClass.model_json_schema())
         
-        prompt = f"""
-{agent_context}
+        # Format the state to be readable for a small model
+        # We only pass slots that aren't 'unknown' to keep the prompt small
+        current_state = {k: v for k, v in (slot_values or {}).items() if v != 'unknown'}
+        state_str = str(current_state)
 
-{system_instruction}
-
-User input: "{user_input}"
-
-Respond ONLY with valid JSON exactly matching the properties in this schema. Do not include markdown codeblocks. Just the raw JSON object. Use "unknown" if a piece of information is missing.
-Schema:
-{json.dumps(schema, indent=2)}
-"""
         try:
-            completion = self.client.chat.completions.create(
-                model=self.model,
-                temperature=0.0,
-                max_tokens=4096,
-                messages=[{"role": "user", "content": prompt}]
-            )
+            # Predict with State Injection
+            with dspy.settings.context(lm=self.lm):
+                result = self.predictor(
+                    context=agent_context,
+                    state=state_str,
+                    instruction=system_instruction,
+                    schema=schema_json,
+                    user_input=user_input
+                )
             
-            response_text = completion.choices[0].message.content
-            if response_text is None:
-                logging.error(f"Response text is None! Full completion: {completion}")
-                response_text = "{}"
+            raw_output = result.output
             
-            # sometimes models wrap json in markdown
-            if response_text.startswith("```json"):
-                response_text = response_text.replace("```json\n", "").replace("\n```", "")
-                
-            print(f"\n[DEBUG] Raw model output:\n{response_text}\n")
+            # Clean JSON
+            json_str = raw_output.strip()
+            if "```json" in json_str:
+                json_str = json_str.split("```json")[1].split("```")[0].strip()
+            elif "```" in json_str:
+                json_str = json_str.split("```")[1].split("```")[0].strip()
+            else:
+                match = re.search(r'\{.*\}', json_str, re.DOTALL)
+                if match:
+                    json_str = match.group(0)
+
+            dict_out = json.loads(json_str)
             
-            parsed_data = json.loads(response_text)
+            # Validate
+            validated = ModelClass(**dict_out)
+            final_dict = validated.model_dump()
             
-            validated = ModelClass(**parsed_data)
-            dict_out = validated.model_dump()
+            print(f"\n[DSPy DEBUG] Extracted for {utterance_type}:\n{final_dict}\n")
             
             final_result = {}
             for slot in self.parser.decoder_slots:
                 if slot.utterance_type == utterance_type:
                     pydantic_field = slot.slot_name.split('.')[-1].replace('-', '_')
-                    if pydantic_field in dict_out:
-                        val = dict_out[pydantic_field]
-                        if val != 'unknown':
+                    if pydantic_field in final_dict:
+                        val = final_dict[pydantic_field]
+                        if val and val != 'unknown':
                             full_slot_name = f"{slot.parent_slot}.{slot.slot_name}" if slot.parent_slot else slot.slot_name
                             final_result[full_slot_name] = str(val)
                             
             return final_result
 
         except Exception as e:
-            logging.error(f"Classification failed: {e}")
+            logging.error(f"DSPy Extraction failed: {e}")
             return {}

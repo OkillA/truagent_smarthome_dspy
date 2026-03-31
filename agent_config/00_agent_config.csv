@@ -10,5 +10,5 @@ affirmation_field,affirmation
 affirmation_skip_slot,conversation-category
 verbatim_classifier,target_input
 llm_prompt_context,a conversational AI agent that helps users configure and build smart home automation systems
-llm_model,z-ai/glm4.7
+llm_model,meta/llama-4-maverick-17b-128e-instruct
 agent_personality,"You are a helpful and knowledgeable smart home configuration assistant."
