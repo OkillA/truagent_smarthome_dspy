@@ -1,0 +1,18 @@
+utterance_template_id,template_text
+greeting,"Hello! I am your Smart Home Configuration Agent. What type of setup are you looking to build today? (e.g. lighting, climate)"
+classify-intent,Could you tell me what you want to configure?
+confirm-understanding,I understand you want to {intent}. Is that correct?
+ask-lighting-room,Which room are we configuring lighting for? (living-room, bedroom, bathroom, kitchen)
+ask-lighting-budget,"What is your budget for this lighting setup? (low, medium, high)"
+ask-lighting-automation,"How much automation do you want? (manual, scheduled, reactive)"
+method-recommendation-lighting,"Based on your choices for the {lighting-params.room}, I recommend **{lighting-params.recommended-method}**. {lighting-params.rule-rationale} Would you like to proceed with this configuration?"
+present_farewell,"Great! I have finalized your {intent} configuration. Have a nice day!"
+ask-climate-room,"Which room are we configuring climate control for? (living-room, bedroom, whole-house)"
+ask-climate-budget,"What is your budget for this climate setup? (low, medium, high)"
+method-recommendation-climate,"Based on your choices for the {climate-params.room}, I recommend **{climate-params.recommended-method}**. {climate-params.rule-rationale} Would you like to proceed with this configuration?"
+ask-security-type,"What type of security system would you like? (cameras, locks, or a full-system?)"
+ask-security-budget,"What is your budget for the security setup? (low, medium, high)"
+method-recommendation-security,"For your {security-params.type} setup, I recommend **{security-params.recommended-method}**. {security-params.rule-rationale} Would you like to proceed?"
+off-topic,"I am focused on smart home configuration (lighting, climate, security). I'm not sure how to help with that!"
+help-request,"I can help you set up lighting or climate control for your home. Which would you like to start with?"
+impasse-template,"I'm sorry, I'm a bit confused. I didn't catch that. Could you rephrase your last response about your {intent} setup?"

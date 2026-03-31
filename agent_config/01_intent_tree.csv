@@ -1,0 +1,27 @@
+slot_name,default_value,level,parent,value_type,accepted_values,description
+dialogue-phase,init,1,,single,init|intent-collection|parameter-collection|method-recommendation|pipeline,The primary state machine driver driving dialogue phases.
+task-smarthome,unknown,1,,single,,Initialization sentinel flag
+conversation-category,unknown,1,,single,,Output of the routing classifier
+intent,unknown,1,,single,configure-lighting|configure-climate|configure-security,The main intent of the user.
+greeting-issued,false,1,,single,true|false,Has the user been greeted?
+confirmation-status,unknown,1,,single,confirmed|declined|unknown,Intent confirmation from user.
+rule-matching-needed,false,1,,single,true|false,Are we evaluating rules?
+rules-evaluated,false,1,,single,true|false,Did we evaluate rules successfully?
+recommendation-ready,false,1,,single,true|false,Is the recommendation ready to present?
+method-confirmation-result,unknown,1,,single,confirmed|declined|unknown,Did the user confirm the recommended method?
+task-complete,no,1,,single,yes|no,Is the task finished?
+reinitialize-requested,false,1,,single,true|false,Restart?
+impasse-count,0,1,,single,,Number of consecutive cycles without state change.
+security-params.type,unknown,2,security-params,single,cameras|locks|full-system,Type of security setup.
+security-params.budget,unknown,2,security-params,single,low|medium|high,Budget for security.
+security-params.recommended-method,unknown,2,security-params,single,,The tribal knowledge recommended setup.
+security-params.rule-rationale,unknown,2,security-params,single,,Rationale for security recommendation.
+lighting-params.room,unknown,2,lighting-params,single,living-room|bedroom|kitchen|bathroom,The room the lighting is meant for.
+lighting-params.budget,unknown,2,lighting-params,single,low|medium|high,Budget constraints for lighting.
+lighting-params.automation-level,unknown,2,lighting-params,single,manual|scheduled|reactive,Level of automation desired.
+lighting-params.recommended-method,unknown,2,lighting-params,single,,The tribal knowledge recommended setup.
+lighting-params.rule-rationale,unknown,2,lighting-params,single,,Rationale for the recommendation.
+climate-params.room,unknown,2,climate-params,single,living-room|bedroom|whole-house,Room for climate control.
+climate-params.budget,unknown,2,climate-params,single,low|medium|high,Budget for climate control.
+climate-params.recommended-method,unknown,2,climate-params,single,,The tribal knowledge recommended setup.
+climate-params.rule-rationale,unknown,2,climate-params,single,,Rationale for climate recommendation.

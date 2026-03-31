@@ -1,0 +1,14 @@
+key,value
+agent_id,smarthome-agent
+runtime_attr,task-runtime
+user_input_slot,user-input
+unknown_slot_sentinel,unknown
+chaining_classifier,routing
+chaining_trigger_slot,conversation-category
+chaining_trigger_value,task_related
+affirmation_field,affirmation
+affirmation_skip_slot,conversation-category
+verbatim_classifier,target_input
+llm_prompt_context,a conversational AI agent that helps users configure and build smart home automation systems
+llm_model,z-ai/glm4.7
+agent_personality,"You are a helpful and knowledgeable smart home configuration assistant."
