@@ -16,3 +16,4 @@ method-recommendation-security,"For your {security-params.type} setup, I recomme
 off-topic,"I am focused on smart home configuration (lighting, climate, security). I'm not sure how to help with that!"
 help-request,"I can help you set up lighting or climate control for your home. Which would you like to start with?"
 impasse-template,"I'm sorry, I'm a bit confused. I didn't catch that. Could you rephrase your last response about your {intent} setup?"
+declined-recommendation,"No problem! I understand that recommendation isn't what you're looking for right now. Feel free to reach out if you'd like to try a different configuration. Goodbye!"

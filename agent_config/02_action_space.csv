@@ -15,6 +15,10 @@ evaluate-and-select-rule,action,method-recommendation,65,dialogue-phase==method-
 reset-rule-matching-needed,orchestration,method-recommendation,59,dialogue-phase==method-recommendation AND rules-evaluated==true AND rule-matching-needed==true,,,,,,rule-matching-needed,false
 present-recommendation-lighting,nlu,method-recommendation,50,dialogue-phase==method-recommendation AND intent==configure-lighting AND rules-evaluated==true AND method-confirmation-result==unknown,method-recommendation-lighting,routing,single,,,method-confirmation-result,
 set-phase-pipeline-from-method,orchestration,method-recommendation,45,dialogue-phase==method-recommendation AND method-confirmation-result==confirmed,,,,,,dialogue-phase,pipeline
+map-affirmation-confirmed,orchestration,method-recommendation,115,dialogue-phase==method-recommendation AND affirmation==confirmed,,,,,,method-confirmation-result,confirmed
+map-affirmation-declined,orchestration,method-recommendation,115,dialogue-phase==method-recommendation AND affirmation==declined,,,,,,method-confirmation-result,declined
+reset-affirmation-after-map,orchestration,method-recommendation,114,dialogue-phase==method-recommendation AND affirmation!=unknown AND method-confirmation-result!=unknown,,,,,,affirmation,unknown
+handle-declined-recommendation,orchestration,method-recommendation,105,dialogue-phase==method-recommendation AND method-confirmation-result==declined,declined-recommendation,,,,,task-complete,yes
 present-summary-lighting,action,pipeline,40,dialogue-phase==pipeline AND intent==configure-lighting AND task-complete==no,,,single,present_farewell,intent,task-complete,
 respond-off-topic,nlu,init,99,conversation-category==off_topic,off-topic,routing,single,,,conversation-category,unknown
 respond-help,nlu,init,99,conversation-category==help_request,help-request,routing,single,,,conversation-category,unknown
@@ -30,5 +34,5 @@ set-phase-method-rec-security,orchestration,parameter-collection,75,dialogue-pha
 evaluate-and-select-rule-security,action,method-recommendation,65,dialogue-phase==method-recommendation AND intent==configure-security AND rule-matching-needed==true AND rules-evaluated==false,,,single,rule_evaluator,"intent,security-params.budget","security-params.recommended-method,security-params.rule-rationale,rules-evaluated",
 present-recommendation-security,nlu,method-recommendation,50,dialogue-phase==method-recommendation AND intent==configure-security AND rules-evaluated==true AND method-confirmation-result==unknown,method-recommendation-security,routing,single,,,method-confirmation-result,
 present-summary-security,action,pipeline,40,dialogue-phase==pipeline AND intent==configure-security AND task-complete==no,,,single,present_farewell,intent,task-complete,
-impasse-recovery,nlu,any,101,impasse-count!=0,impasse-template,routing,single,,,impasse-count,0
+impasse-recovery,nlu,any,101,impasse-count!=0,impasse-template,routing,single,,,,
 impasse-reset-routing,orchestration,any,101,impasse-count!=0,,,,,,conversation-category,unknown

@@ -142,6 +142,8 @@ class CognitiveEngine:
         if best_op.operator_type == "orchestration":
             if best_op.affected_slot:
                 self.slots[best_op.affected_slot] = best_op.expected_value
+            if best_op.utterance_template_id:
+                return self.encoder.generate(best_op.utterance_template_id, self.slots)
             return None 
 
         elif best_op.operator_type == "action":

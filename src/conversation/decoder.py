@@ -6,6 +6,7 @@ import re
 from typing import Dict, List, Optional, Type
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
+from langfuse import observe
 
 load_dotenv()
 
@@ -88,6 +89,7 @@ class GenericClassifier:
         
         self.predictor.demos = examples
 
+    @observe()
     def classify(self, user_input: str, utterance_type: str, slots_to_extract: list, slot_values: dict = None) -> dict:
         if utterance_type not in self.models_module.MODELS:
             raise ValueError(f"No generated model for: {utterance_type}")
@@ -98,7 +100,6 @@ class GenericClassifier:
         schema_json = json.dumps(ModelClass.model_json_schema())
         
         # Format the state to be readable for a small model
-        # We only pass slots that aren't 'unknown' to keep the prompt small
         current_state = {k: v for k, v in (slot_values or {}).items() if v != 'unknown'}
         state_str = str(current_state)
 
