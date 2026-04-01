@@ -1,5 +1,17 @@
 import logging
 from typing import Dict, Optional
+from prometheus_client import Counter, Gauge
+
+# Impasse Metrics
+AGENT_IMPASSE_TOTAL = Counter(
+    'agent_impasse_total', 
+    'Total number of impasses (no state change)', 
+    ['utterance_type']
+)
+AGENT_IMPASSE_LEVEL = Gauge(
+    'agent_impasse_level', 
+    'Current impasse count for the active session'
+)
 
 class CognitiveEngine:
     def __init__(self, parser, decoder, encoder, tool_executor):
@@ -119,9 +131,16 @@ class CognitiveEngine:
                 current_impasse = int(self.slots.get('impasse-count', 0))
             except (ValueError, TypeError):
                 current_impasse = 0
-            self.slots['impasse-count'] = str(current_impasse + 1)
+            
+            new_impasse = current_impasse + 1
+            self.slots['impasse-count'] = str(new_impasse)
+            
+            # Record Prometheus Metrics
+            AGENT_IMPASSE_LEVEL.set(new_impasse)
+            AGENT_IMPASSE_TOTAL.labels(utterance_type=op.classifier_tool).inc()
         else:
             self.slots['impasse-count'] = '0'
+            AGENT_IMPASSE_LEVEL.set(0)
 
         self.pending_operator = None
 
