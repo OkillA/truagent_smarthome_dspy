@@ -7,8 +7,22 @@ from typing import Dict, List, Optional, Type
 from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 from langfuse import observe
+from prometheus_client import Counter, Histogram
+import time
 
 load_dotenv()
+
+# Prometheus Metrics
+LLM_CALLS_TOTAL = Counter(
+    'llm_calls_total', 
+    'Total number of LLM calls', 
+    ['model', 'utterance_type', 'status']
+)
+LLM_LATENCY_SECONDS = Histogram(
+    'llm_latency_seconds', 
+    'Latency of LLM calls in seconds', 
+    ['model', 'utterance_type']
+)
 
 # Define the DSPy Signature with 'state' for short-term memory
 class ExtractJSON(dspy.Signature):
@@ -103,6 +117,7 @@ class GenericClassifier:
         current_state = {k: v for k, v in (slot_values or {}).items() if v != 'unknown'}
         state_str = str(current_state)
 
+        start_time = time.time()
         try:
             # Predict with State Injection
             with dspy.settings.context(lm=self.lm):
@@ -113,6 +128,10 @@ class GenericClassifier:
                     schema=schema_json,
                     user_input=user_input
                 )
+            
+            latency = time.time() - start_time
+            LLM_LATENCY_SECONDS.labels(model=self.model_name, utterance_type=utterance_type).observe(latency)
+            LLM_CALLS_TOTAL.labels(model=self.model_name, utterance_type=utterance_type, status='success').inc()
             
             raw_output = result.output
             
@@ -148,5 +167,6 @@ class GenericClassifier:
             return final_result
 
         except Exception as e:
+            LLM_CALLS_TOTAL.labels(model=self.model_name, utterance_type=utterance_type, status='error').inc()
             logging.error(f"DSPy Extraction failed: {e}")
             return {}

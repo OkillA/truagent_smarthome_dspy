@@ -11,6 +11,7 @@ from src.conversation.encoder import TemplateEngine
 from src.tools.registry import ToolRegistry
 from src.tools.executor import ToolExecutor
 from src.engine.cognitive_engine import CognitiveEngine
+from prometheus_client import start_http_server
 
 logging.basicConfig(level=logging.ERROR, format='%(levelname)s: %(message)s')
 
@@ -36,6 +37,13 @@ class AgentRunner:
 
     def run(self):
         print("Initializing Smart Home Configuration Agent...\n")
+        print("Prometheus metrics available at http://localhost:8000/metrics\n")
+        
+        # Start Prometheus metrics server
+        try:
+            start_http_server(8000)
+        except Exception as e:
+            logging.error(f"Failed to start Prometheus server: {e}")
         
         msg = self._advance_to_message()
         if msg and msg != "[HALT]":
