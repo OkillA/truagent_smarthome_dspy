@@ -11,7 +11,27 @@ from src.conversation.encoder import TemplateEngine
 from src.tools.registry import ToolRegistry
 from src.tools.executor import ToolExecutor
 from src.engine.cognitive_engine import CognitiveEngine
-from prometheus_client import start_http_server
+from prometheus_client import start_http_server, Counter, Histogram, Summary
+import time
+
+# Macro-Level Metrics
+AGENT_SESSION_TOTAL = Counter(
+    'agent_session_total', 
+    'Total number of agent sessions', 
+    ['status']
+)
+AGENT_SESSION_DURATION = Histogram(
+    'agent_session_duration_seconds', 
+    'Duration of agent sessions in seconds'
+)
+AGENT_TURNS_PER_SESSION = Summary(
+    'agent_turns_per_session', 
+    'Number of turns per conversation'
+)
+AGENT_TASK_SUCCESS_TOTAL = Counter(
+    'agent_task_success_total', 
+    'Total number of successfully completed tasks'
+)
 
 logging.basicConfig(level=logging.ERROR, format='%(levelname)s: %(message)s')
 
@@ -34,6 +54,11 @@ class AgentRunner:
             encoder=self.encoder,
             tool_executor=self.executor
         )
+        
+        # Session State
+        self.start_time = time.time()
+        self.turn_count = 0
+        AGENT_SESSION_TOTAL.labels(status='started').inc()
 
     def run(self):
         print("Initializing Smart Home Configuration Agent...\n")
@@ -52,19 +77,31 @@ class AgentRunner:
         while True:
             if self.engine.slots.get('task-complete') == 'yes':
                 print("Task marked as complete. Halting.")
+                AGENT_TASK_SUCCESS_TOTAL.inc()
+                AGENT_SESSION_TOTAL.labels(status='completed').inc()
                 break
 
             user_input = input("You: ")
+            self.turn_count += 1
+            
             if user_input.lower() in ['exit', 'quit']:
+                AGENT_SESSION_TOTAL.labels(status='abandoned').inc()
                 break
 
             self.engine.process_input(user_input)
 
             msg = self._advance_to_message()
             if msg == "[HALT]":
+                AGENT_SESSION_TOTAL.labels(status='completed').inc()
                 break
             elif msg:
                 print(f"Agent: {msg}")
+
+        # Final Session Metrics
+        duration = time.time() - self.start_time
+        AGENT_SESSION_DURATION.observe(duration)
+        AGENT_TURNS_PER_SESSION.observe(self.turn_count)
+
 
     def _advance_to_message(self):
         max_cycles = 100
