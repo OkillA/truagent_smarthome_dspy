@@ -5,7 +5,7 @@ import typing
 MODELS = {}
 
 class RoutingModel(BaseModel):
-    conversation_category: Optional[Literal['task_related', 'greeting', 'help_request', 'off_topic', 'unknown']] = Field(default="unknown", description="The general intent or category of the user's message")
+    conversation_category: Optional[Literal['task_related', 'greeting', 'help_request', 'off_topic', 'exit', 'unknown']] = Field(default="unknown", description="The general intent or category of the user's message")
     affirmation: Optional[Literal['confirmed', 'declined', 'unknown']] = Field(default="unknown", description="Whether the user is confirming or declining")
 MODELS['routing'] = RoutingModel
 
