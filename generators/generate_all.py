@@ -1,11 +1,8 @@
 import os
-import sys
 
-# Add generators to path
-sys.path.append(os.path.dirname(__file__))
-
-from csv_parser import CSVParser
-from generate_models import generate_conversation_models
+from generators.csv_parser import CSVParser
+from generators.config_validator import validate_or_raise
+from generators.generate_models import generate_conversation_models
 
 def main():
     root_dir = os.path.dirname(os.path.dirname(__file__))
@@ -14,6 +11,7 @@ def main():
     
     parser = CSVParser(config_dir)
     parser.parse_all()
+    validate_or_raise(parser)
     print("Parsed all CSV configs.")
     
     generate_conversation_models(parser, os.path.join(generated_dir, 'conversation_models.py'))

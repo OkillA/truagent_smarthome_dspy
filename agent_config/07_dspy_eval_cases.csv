@@ -1,0 +1,5 @@
+case_id,utterance_type,state_json,slots_to_extract,user_input,expected_output_json
+routing-task-related,routing,{},"conversation-category,affirmation","I want to set up some lights","{""conversation-category"": ""task_related""}"
+routing-confirmed,routing,"{""intent"": ""configure-lighting""}","conversation-category,affirmation","Yes, that is correct","{""affirmation"": ""confirmed""}"
+task-related-rich,task_related,{},"intent,lighting-params.room,lighting-params.budget,lighting-params.automation-level","I want lighting in my bedroom with a low budget and scheduled automation","{""intent"": ""configure-lighting"", ""lighting-params.room"": ""bedroom"", ""lighting-params.budget"": ""low"", ""lighting-params.automation-level"": ""scheduled""}"
+task-related-reactive,task_related,{},"intent,lighting-params.room,lighting-params.budget,lighting-params.automation-level","I want to set up lighting in my bedroom at a low cost that is sensor based","{""intent"": ""configure-lighting"", ""lighting-params.room"": ""bedroom"", ""lighting-params.budget"": ""low"", ""lighting-params.automation-level"": ""reactive""}"

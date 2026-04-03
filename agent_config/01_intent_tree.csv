@@ -4,6 +4,7 @@ task-smarthome,unknown,1,,single,,Initialization sentinel flag
 conversation-category,unknown,1,,single,,Output of the routing classifier
 intent,unknown,1,,single,configure-lighting|configure-climate|configure-security,The main intent of the user.
 greeting-issued,false,1,,single,true|false,Has the user been greeted?
+affirmation,unknown,1,,single,confirmed|declined|unknown,Transient confirmation/decline signal from the routing classifier.
 confirmation-status,unknown,1,,single,confirmed|declined|unknown,Intent confirmation from user.
 rule-matching-needed,false,1,,single,true|false,Are we evaluating rules?
 rules-evaluated,false,1,,single,true|false,Did we evaluate rules successfully?

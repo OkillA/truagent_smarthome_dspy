@@ -1,7 +1,7 @@
 slot_name,parent_slot,utterance_type,value_type,accepted_values,description,instructions,skip_initial
 conversation-category,,routing,single,task_related|greeting|help_request|off_topic|exit,The general intent or category of the user's message,"You are a dialogue categorizer. Classify the user's utterance into one of the available categories. If they are talking about smart homes, it is task_related. If they want to stop, quit, or end the session, it is 'exit'.",false
 affirmation,,routing,single,confirmed|declined|unknown,Whether the user is confirming or declining,,false
-intent,,task_related,single,configure-lighting|configure-climate|configure-security,The specific smart home configuration task,"Extract specific smart home configuration details. If no clear intent is found, leave as 'unknown'. Do NOT guess.",false
+intent,,task_related,single,configure-lighting|configure-climate|configure-security,The specific smart home configuration task,"Extract specific smart home configuration details. If no clear intent is found, leave as 'unknown'. Do NOT guess. For lighting requests, phrases like 'sensor based', 'motion activated', 'motion sensing', or 'presence based' should map to automation-level='reactive'. Phrases like 'cheap', 'budget', or 'low cost' should map to budget='low' only when the user clearly expresses affordability.",false
 type,security-params,security_related,single,cameras|locks|full-system,The type of security setup,,false
 budget,security-params,security_related,single,low|medium|high,Budget for security,,false
 room,lighting-params,task_related,single,living-room|bedroom|kitchen|bathroom,The room the lighting is for,,false

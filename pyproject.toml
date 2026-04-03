@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "truagent-smarthome-dspy"
+version = "0.1.0"
+description = "Config-driven smart home conversational agent using DSPy and generated schemas."
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "openai>=2.30.0",
+    "pydantic>=2.0.0",
+    "python-dotenv>=1.0.0",
+    "langfuse>=4.0.0",
+    "dspy-ai>=3.1.3",
+    "prometheus-client>=0.17.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+]
+
+[project.scripts]
+smarthome-agent = "src.ui.cli:main"
+generate-smarthome-models = "generators.generate_all:main"
+validate-smarthome-config = "generators.config_validator:main"
+evaluate-smarthome-decoder = "src.evaluation.decoder_eval:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src*", "generators*"]

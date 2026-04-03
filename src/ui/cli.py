@@ -1,17 +1,16 @@
 import os
-import sys
 import logging
-
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
+import uuid
 
 from generators.csv_parser import CSVParser
+from generators.config_validator import validate_or_raise
 from src.generated import conversation_models
 from src.conversation.decoder import GenericClassifier
 from src.conversation.encoder import TemplateEngine
 from src.tools.registry import ToolRegistry
 from src.tools.executor import ToolExecutor
 from src.engine.cognitive_engine import CognitiveEngine
-from prometheus_client import start_http_server, Counter, Histogram, Summary
+from prometheus_client import REGISTRY, start_http_server, Counter, Histogram, Summary, Gauge, push_to_gateway
 import time
 
 # Macro-Level Metrics
@@ -32,13 +31,31 @@ AGENT_TASK_SUCCESS_TOTAL = Counter(
     'agent_task_success_total', 
     'Total number of successfully completed tasks'
 )
+AGENT_ONE_SHOT_SUCCESS_TOTAL = Counter(
+    "agent_one_shot_success_total",
+    "Total number of successful sessions completed in a single user turn.",
+)
+AGENT_USER_TURN_LATENCY_SECONDS = Histogram(
+    "agent_user_turn_latency_seconds",
+    "Latency from receiving a user turn to producing the next agent response.",
+    ["phase"],
+)
+AGENT_METRICS_SERVER_STATUS = Gauge(
+    "agent_metrics_server_status",
+    "Whether the Prometheus metrics HTTP server is currently running (1=yes, 0=no).",
+)
 
 logging.basicConfig(level=logging.ERROR, format='%(levelname)s: %(message)s')
+
+DEFAULT_METRICS_PORT = 8000
+DEFAULT_PUSHGATEWAY_URL = os.getenv("PROMETHEUS_PUSHGATEWAY_URL", "http://localhost:9091")
+
 
 class AgentRunner:
     def __init__(self, config_dir: str):
         self.parser = CSVParser(config_dir)
         self.parser.parse_all()
+        validate_or_raise(self.parser)
 
         self.registry = ToolRegistry()
         self.registry.discover_and_register("src.tools.plugins")
@@ -56,51 +73,60 @@ class AgentRunner:
         )
         
         # Session State
+        self.session_id = uuid.uuid4().hex
         self.start_time = time.time()
         self.turn_count = 0
         AGENT_SESSION_TOTAL.labels(status='started').inc()
 
     def run(self):
         print("Initializing Smart Home Configuration Agent...\n")
-        print("Prometheus metrics available at http://localhost:8000/metrics\n")
+        print(f"Prometheus metrics available at http://localhost:{DEFAULT_METRICS_PORT}/metrics\n")
         
         # Start Prometheus metrics server
         try:
-            start_http_server(8000)
+            start_http_server(DEFAULT_METRICS_PORT)
+            AGENT_METRICS_SERVER_STATUS.set(1)
         except Exception as e:
+            AGENT_METRICS_SERVER_STATUS.set(0)
             logging.error(f"Failed to start Prometheus server: {e}")
         
         msg = self._advance_to_message()
         if msg and msg != "[HALT]":
             print(f"Agent: {msg}")
 
-        while True:
-            if self.engine.slots.get('task-complete') == 'yes':
-                print("Task marked as complete. Halting.")
-                AGENT_TASK_SUCCESS_TOTAL.inc()
-                AGENT_SESSION_TOTAL.labels(status='completed').inc()
-                break
+        try:
+            while True:
+                if self.engine.slots.get('task-complete') == 'yes':
+                    print("Task marked as complete. Halting.")
+                    AGENT_TASK_SUCCESS_TOTAL.inc()
+                    AGENT_SESSION_TOTAL.labels(status='completed').inc()
+                    break
 
-            user_input = input("You: ")
-            self.turn_count += 1
-            
-            if user_input.lower() in ['exit', 'quit']:
-                AGENT_SESSION_TOTAL.labels(status='abandoned').inc()
-                break
+                user_input = input("You: ")
+                self.turn_count += 1
+                turn_start = time.time()
 
-            self.engine.process_input(user_input)
+                self.engine.process_input(user_input)
 
-            msg = self._advance_to_message()
-            if msg == "[HALT]":
-                AGENT_SESSION_TOTAL.labels(status='completed').inc()
-                break
-            elif msg:
-                print(f"Agent: {msg}")
-
-        # Final Session Metrics
-        duration = time.time() - self.start_time
-        AGENT_SESSION_DURATION.observe(duration)
-        AGENT_TURNS_PER_SESSION.observe(self.turn_count)
+                msg = self._advance_to_message()
+                AGENT_USER_TURN_LATENCY_SECONDS.labels(
+                    phase=self.engine.slots.get("dialogue-phase", "unknown")
+                ).observe(time.time() - turn_start)
+                if msg == "[HALT]":
+                    if self.engine.slots.get('task-complete') == 'yes':
+                        AGENT_TASK_SUCCESS_TOTAL.inc()
+                    AGENT_SESSION_TOTAL.labels(status='completed').inc()
+                    break
+                elif msg:
+                    print(f"Agent: {msg}")
+        finally:
+            # Final Session Metrics
+            duration = time.time() - self.start_time
+            AGENT_SESSION_DURATION.observe(duration)
+            AGENT_TURNS_PER_SESSION.observe(self.turn_count)
+            if self.engine.slots.get('task-complete') == 'yes' and self.turn_count == 1:
+                AGENT_ONE_SHOT_SUCCESS_TOTAL.inc()
+            self._push_metrics_snapshot()
 
 
     def _advance_to_message(self):
@@ -118,8 +144,28 @@ class AgentRunner:
         print("Agent stalled (exceeded max_cycles without NLU interaction).")
         return "[HALT]"
 
-if __name__ == "__main__":
+    def _push_metrics_snapshot(self) -> None:
+        try:
+            push_to_gateway(
+                DEFAULT_PUSHGATEWAY_URL,
+                job="smart_home_agent_session",
+                registry=REGISTRY,
+                grouping_key={"session_id": self.session_id},
+            )
+        except Exception as exc:
+            logging.error(f"Failed to push metrics to Pushgateway: {exc}")
+
+
+def get_default_config_dir() -> str:
     root_dir = os.path.dirname(os.path.dirname(os.path.dirname(__file__)))
-    config_dir = os.path.join(root_dir, 'agent_config')
+    return os.path.join(root_dir, 'agent_config')
+
+
+def main() -> None:
+    config_dir = get_default_config_dir()
     runner = AgentRunner(config_dir)
     runner.run()
+
+
+if __name__ == "__main__":
+    main()

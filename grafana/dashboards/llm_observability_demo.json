@@ -520,7 +520,7 @@
           "refId": "A"
         }
       ],
-      "title": "Handshake Failures",
+      "title": "LLM/State Handshake Failures",
       "type": "stat"
     },
     {
@@ -554,63 +554,6 @@
             "lineWidth": 2,
             "showPoints": "auto",
             "spanNulls": true
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 12
-      },
-      "id": 1,
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "expr": "sum by (utterance_type, status) (llm_calls_total{job=\"smart_home_agent_session\"} and on(session_id) present_over_time(push_time_seconds{job=\"smart_home_agent_session\"}[${__range_s}s]))",
-          "format": "time_series",
-          "legendFormat": "{{utterance_type}} / {{status}}",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "LLM Request Volume",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisPlacement": "auto",
-            "drawStyle": "line",
-            "fillOpacity": 16,
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "showPoints": "auto",
-            "spanNulls": true
           },
           "unit": "s"
         },
@@ -618,8 +561,8 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
-        "x": 12,
+        "w": 24,
+        "x": 0,
         "y": 12
       },
       "id": 2,
@@ -660,7 +603,7 @@
           "refId": "B"
         }
       ],
-      "title": "LLM vs Full Turn Latency",
+      "title": "Response Latency Breakdown",
       "type": "timeseries"
     },
     {
@@ -795,7 +738,7 @@
           "refId": "A"
         }
       ],
-      "title": "No-Change per Session",
+      "title": "Stuck Turns per Session",
       "type": "stat"
     },
     {
@@ -816,58 +759,6 @@
         "h": 5,
         "w": 4,
         "x": 8,
-        "y": 21
-      },
-      "id": 21,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "area",
-        "justifyMode": "center",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "value"
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "expr": "(sum(agent_candidate_operator_count_sum{job=\"smart_home_agent_session\"} and on(session_id) present_over_time(push_time_seconds{job=\"smart_home_agent_session\"}[${__range_s}s])) / clamp_min(sum(agent_candidate_operator_count_count{job=\"smart_home_agent_session\"} and on(session_id) present_over_time(push_time_seconds{job=\"smart_home_agent_session\"}[${__range_s}s])), 1)) or vector(0)",
-          "format": "time_series",
-          "instant": true,
-          "range": false,
-          "refId": "A"
-        }
-      ],
-      "title": "Avg Candidate Operators",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "noValue": "0"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 5,
-        "w": 4,
-        "x": 12,
         "y": 21
       },
       "id": 22,
@@ -899,7 +790,7 @@
           "refId": "A"
         }
       ],
-      "title": "Dynamic NLU / Session",
+      "title": "NLU Requests per Session",
       "type": "stat"
     },
     {
@@ -936,8 +827,8 @@
       },
       "gridPos": {
         "h": 5,
-        "w": 4,
-        "x": 16,
+        "w": 6,
+        "x": 12,
         "y": 21
       },
       "id": 23,
@@ -1006,8 +897,8 @@
       },
       "gridPos": {
         "h": 5,
-        "w": 4,
-        "x": 20,
+        "w": 6,
+        "x": 18,
         "y": 21
       },
       "id": 24,
@@ -1039,478 +930,8 @@
           "refId": "A"
         }
       ],
-      "title": "Traceable Decisions",
+      "title": "Explainable Decisions",
       "type": "stat"
-    },
-    {
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 27
-      },
-      "id": 102,
-      "panels": [],
-      "title": "Conversation Flow",
-      "type": "row"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "thresholds"
-          },
-          "noValue": "0",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 2
-              },
-              {
-                "color": "red",
-                "value": 4
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 4,
-        "x": 0,
-        "y": 28
-      },
-      "id": 7,
-      "options": {
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "center",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "value"
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "expr": "max(agent_impasse_level{job=\"smart_home_agent_session\"} and on(session_id) present_over_time(push_time_seconds{job=\"smart_home_agent_session\"}[${__range_s}s])) or vector(0)",
-          "format": "time_series",
-          "instant": true,
-          "range": false,
-          "refId": "A"
-        }
-      ],
-      "title": "Current Impasse Level",
-      "type": "stat"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 10,
-        "x": 4,
-        "y": 28
-      },
-      "id": 8,
-      "options": {
-        "displayLabels": [
-          "name",
-          "value"
-        ],
-        "legend": {
-          "displayMode": "hidden",
-          "placement": "bottom",
-          "showLegend": false
-        },
-        "orientation": "horizontal",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "expr": "sum by (utterance_type) (agent_impasse_total{job=\"smart_home_agent_session\"} and on(session_id) present_over_time(push_time_seconds{job=\"smart_home_agent_session\"}[${__range_s}s]))",
-          "format": "time_series",
-          "legendFormat": "{{utterance_type}}",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Stall Points by Classifier",
-      "type": "barchart"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisPlacement": "auto",
-            "drawStyle": "line",
-            "fillOpacity": 12,
-            "lineInterpolation": "smooth",
-            "lineWidth": 2,
-            "showPoints": "auto",
-            "spanNulls": true
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 10,
-        "x": 14,
-        "y": 28
-      },
-      "id": 9,
-      "options": {
-        "legend": {
-          "displayMode": "hidden",
-          "placement": "bottom",
-          "showLegend": false
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "expr": "max without(session_id) (agent_impasse_level{job=\"smart_home_agent_session\"} and on(session_id) present_over_time(push_time_seconds{job=\"smart_home_agent_session\"}[${__range_s}s])) or vector(0)",
-          "format": "time_series",
-          "legendFormat": "Impasse level",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Impasse Timeline",
-      "type": "timeseries"
-    },
-    {
-      "collapsed": false,
-      "gridPos": {
-        "h": 1,
-        "w": 24,
-        "x": 0,
-        "y": 36
-      },
-      "id": 103,
-      "panels": [],
-      "title": "Engine Diagnostics",
-      "type": "row"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisPlacement": "auto",
-            "drawStyle": "bars",
-            "fillOpacity": 80,
-            "lineWidth": 1
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 0,
-        "y": 37
-      },
-      "id": 10,
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "expr": "sum by (tool_name, status) (tool_executions_total{job=\"smart_home_agent_session\"} and on(session_id) present_over_time(push_time_seconds{job=\"smart_home_agent_session\"}[${__range_s}s]))",
-          "format": "time_series",
-          "legendFormat": "{{tool_name}} / {{status}}",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Tool Execution Volume",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisPlacement": "auto",
-            "drawStyle": "bars",
-            "fillOpacity": 80,
-            "lineWidth": 1
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 8,
-        "y": 37
-      },
-      "id": 11,
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "expr": "topk(8, sum by (operator_id) (agent_operator_selected_total{job=\"smart_home_agent_session\"} and on(session_id) present_over_time(push_time_seconds{job=\"smart_home_agent_session\"}[${__range_s}s])))",
-          "format": "time_series",
-          "legendFormat": "{{operator_id}}",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Top Operator Hits",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisPlacement": "auto",
-            "drawStyle": "bars",
-            "fillOpacity": 80,
-            "lineWidth": 1
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 8,
-        "x": 16,
-        "y": 37
-      },
-      "id": 12,
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "expr": "topk(8, sum by (slot_name) (agent_slot_updates_total{job=\"smart_home_agent_session\"} and on(session_id) present_over_time(push_time_seconds{job=\"smart_home_agent_session\"}[${__range_s}s])))",
-          "format": "time_series",
-          "legendFormat": "{{slot_name}}",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Most Updated Slots",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 45
-      },
-      "id": 13,
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "expr": "sum by (slot_name) (agent_slot_updates_total{job=\"smart_home_agent_session\",source=\"routing\"} and on(session_id) present_over_time(push_time_seconds{job=\"smart_home_agent_session\"}[${__range_s}s]))",
-          "format": "time_series",
-          "legendFormat": "{{slot_name}}",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Routing Slot Signals",
-      "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource}"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 45
-      },
-      "id": 14,
-      "options": {
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource}"
-          },
-          "editorMode": "code",
-          "expr": "sum by (scope, utterance_type) (llm_scoped_requests_total{job=\"smart_home_agent_session\"} and on(session_id) present_over_time(push_time_seconds{job=\"smart_home_agent_session\"}[${__range_s}s]))",
-          "format": "time_series",
-          "legendFormat": "{{utterance_type}} / {{scope}}",
-          "range": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Decoder Scope Mix",
-      "type": "timeseries"
     }
   ],
   "refresh": "5s",
@@ -1519,7 +940,9 @@
   "tags": [
     "agent",
     "llm",
-    "observability"
+    "observability",
+    "demo",
+    "standup"
   ],
   "templating": {
     "list": [
@@ -1549,8 +972,8 @@
   },
   "timepicker": {},
   "timezone": "",
-  "title": "LLM Observability",
-  "uid": "llm-obs-1",
-  "version": 5,
+  "title": "LLM Observability Demo",
+  "uid": "llm-obs-demo",
+  "version": 1,
   "weekStart": ""
 }

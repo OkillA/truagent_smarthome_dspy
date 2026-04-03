@@ -1,0 +1,4 @@
+utterance_type,context,state,instruction,user_input,output
+routing,Smart home assistant,{},"Classify the message.","I want to set up some lights","{""conversation_category"": ""task_related"", ""affirmation"": ""unknown""}"
+routing,Smart home assistant,"{'intent': 'configure-lighting'}","Classify the message.","Yes, that is correct","{""conversation_category"": ""unknown"", ""affirmation"": ""confirmed""}"
+routing,Smart home assistant,"{'intent': 'configure-lighting', 'room': 'living-room'}","Classify the message.","I'd like it to be reactive","{""conversation_category"": ""task_related"", ""affirmation"": ""unknown""}"

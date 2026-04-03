@@ -1,4 +1,5 @@
 import csv
+import json
 from dataclasses import dataclass
 from typing import Dict, List
 import os
@@ -52,6 +53,24 @@ class UtteranceTemplate:
     utterance_template_id: str
     template_text: str
 
+@dataclass
+class DSPyExample:
+    utterance_type: str
+    context: str
+    state: str
+    instruction: str
+    user_input: str
+    output: str
+
+@dataclass
+class DSPyEvalCase:
+    case_id: str
+    utterance_type: str
+    state_json: str
+    slots_to_extract: str
+    user_input: str
+    expected_output_json: str
+
 class CSVParser:
     def __init__(self, config_dir: str):
         self.config_dir = config_dir
@@ -61,6 +80,12 @@ class CSVParser:
         self.tribal_knowledge: List[Triple] = []
         self.decoder_slots: List[DecoderSlot] = []
         self.encoder_templates: List[UtteranceTemplate] = []
+        self.dspy_examples: List[DSPyExample] = []
+        self.dspy_eval_cases: List[DSPyEvalCase] = []
+
+    @property
+    def unknown_sentinel(self) -> str:
+        return self.agent_config.get("unknown_slot_sentinel", "unknown")
 
     def parse_all(self):
         self._parse_00()
@@ -69,6 +94,8 @@ class CSVParser:
         self._parse_03()
         self._parse_04()
         self._parse_05()
+        self._parse_06()
+        self._parse_07()
 
     def _parse_00(self):
         path = os.path.join(self.config_dir, "00_agent_config.csv")
@@ -118,3 +145,25 @@ class CSVParser:
             for row in reader:
                 row.pop(None, None)
                 self.encoder_templates.append(UtteranceTemplate(**row))
+
+    def _parse_06(self):
+        path = os.path.join(self.config_dir, "06_dspy_examples.csv")
+        if not os.path.exists(path):
+            return
+
+        with open(path, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                row.pop(None, None)
+                self.dspy_examples.append(DSPyExample(**row))
+
+    def _parse_07(self):
+        path = os.path.join(self.config_dir, "07_dspy_eval_cases.csv")
+        if not os.path.exists(path):
+            return
+
+        with open(path, 'r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                row.pop(None, None)
+                self.dspy_eval_cases.append(DSPyEvalCase(**row))

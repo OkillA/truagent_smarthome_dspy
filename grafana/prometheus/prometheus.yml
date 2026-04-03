@@ -5,3 +5,8 @@ scrape_configs:
   - job_name: 'smart-home-agent'
     static_configs:
       - targets: ['host.docker.internal:8000']
+
+  - job_name: 'smart-home-agent-pushgateway'
+    honor_labels: true
+    static_configs:
+      - targets: ['pushgateway:9091']

@@ -3,6 +3,18 @@ import logging
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
 from enum import Enum
+from prometheus_client import Counter, Histogram
+
+TOOL_EXECUTIONS_TOTAL = Counter(
+    "tool_executions_total",
+    "Total number of tool executions.",
+    ["tool_name", "status"],
+)
+TOOL_EXECUTION_SECONDS = Histogram(
+    "tool_execution_seconds",
+    "Tool execution latency in seconds.",
+    ["tool_name"],
+)
 
 class ToolStatus(Enum):
     SUCCESS = "SUCCESS"
@@ -44,10 +56,16 @@ class BaseTool:
         try:
             result = self._execute_impl(context)
             result.execution_time = time.time() - start_time
+            TOOL_EXECUTIONS_TOTAL.labels(tool_name=self.name, status=result.status.value).inc()
+            TOOL_EXECUTION_SECONDS.labels(tool_name=self.name).observe(result.execution_time)
             return result
         except Exception as e:
             logging.exception(f"Error in tool {self.name}: {e}")
-            return self._create_failure(str(e))
+            result = self._create_failure(str(e))
+            result.execution_time = time.time() - start_time
+            TOOL_EXECUTIONS_TOTAL.labels(tool_name=self.name, status=result.status.value).inc()
+            TOOL_EXECUTION_SECONDS.labels(tool_name=self.name).observe(result.execution_time)
+            return result
 
     def _execute_impl(self, context: ToolContext) -> ToolResult:
         raise NotImplementedError
