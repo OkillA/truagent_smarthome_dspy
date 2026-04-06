@@ -2,11 +2,10 @@ import re
 import time
 from prometheus_client import Histogram
 
-# NLG Metrics
 AGENT_NLG_GENERATION_SECONDS = Histogram(
     "agent_nlg_generation_seconds",
-    "Time taken to generate a response from a template (NLG Detokenization).",
-    ["template_id"]
+    "Time taken to generate a response from a template.",
+    ["template_id"],
 )
 
 class TemplateEngine:
@@ -26,6 +25,6 @@ class TemplateEngine:
         for ph in placeholders:
             val = slot_values.get(ph, f"[{ph} missing]")
             result = result.replace(f"{{{ph}}}", str(val))
-        
+
         AGENT_NLG_GENERATION_SECONDS.labels(template_id=template_id).observe(time.time() - start_time)
         return result

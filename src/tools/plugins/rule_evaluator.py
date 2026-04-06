@@ -1,6 +1,7 @@
 from typing import Dict, Any
 from prometheus_client import Counter
 from ..base import BaseTool, ToolContext, ToolResult
+from ...engine.productions import ProductionCompiler
 
 RULE_FALLBACK_TOTAL = Counter(
     "rule_fallback_total",
@@ -22,6 +23,11 @@ RULE_TRACEABILITY_TOTAL = Counter(
     "Total number of recommendation decisions with or without a usable rationale trace.",
     ["intent", "status"],
 )
+RULE_RETRIEVAL_TOTAL = Counter(
+    "rule_retrieval_total",
+    "Total number of rule catalog retrieval outcomes used to approximate retrieval precision.",
+    ["intent", "status"],
+)
 
 class RuleEvaluatorTool(BaseTool):
     @property
@@ -33,12 +39,7 @@ class RuleEvaluatorTool(BaseTool):
         return "Evaluates tribal knowledge against current slot values."
 
     def _group_rules(self, parser) -> dict[str, dict[str, str]]:
-        rules = {}
-        for triple in parser.tribal_knowledge:
-            if triple.subject not in rules:
-                rules[triple.subject] = {}
-            rules[triple.subject][triple.predicate] = triple.object
-        return rules
+        return ProductionCompiler().compile_tribal_knowledge(parser.tribal_knowledge)
 
     def _resolve_slot_prefix(self, intent: str, rule: dict[str, str]) -> str:
         slot_prefix = rule.get("slot-prefix", "").strip()
@@ -127,9 +128,12 @@ class RuleEvaluatorTool(BaseTool):
         intent = context.get_input('intent', unknown_sentinel)
 
         rules = self._group_rules(parser)
+        evaluated_rule_ids: list[str] = []
 
         recommended_method = unknown_sentinel
         rationale = unknown_sentinel
+        matched_rule_id = ""
+        fallback_used = False
 
         for r_id, r in rules.items():
             if r.get('task-type') != intent:
@@ -137,12 +141,15 @@ class RuleEvaluatorTool(BaseTool):
             if r.get("fallback", "").lower() == "true":
                 continue
 
+            evaluated_rule_ids.append(r_id)
             slot_prefix = self._resolve_slot_prefix(intent, r)
             if self._matches_rule(context, slot_prefix, r, unknown_sentinel):
                 recommended_method = r.get('recommended-method', unknown_sentinel)
                 rationale = r.get('rationale', '')
                 target_slot_prefix = slot_prefix
+                matched_rule_id = r_id
                 RULE_MATCH_TOTAL.labels(intent=intent, recommended_method=recommended_method).inc()
+                RULE_RETRIEVAL_TOTAL.labels(intent=intent, status="exact_match").inc()
                 break
 
         if recommended_method == unknown_sentinel:
@@ -151,20 +158,37 @@ class RuleEvaluatorTool(BaseTool):
                 recommended_method = fallback_rule.get("recommended-method", unknown_sentinel)
                 rationale = fallback_rule.get("rationale", unknown_sentinel)
                 target_slot_prefix = self._resolve_slot_prefix(intent, fallback_rule)
+                matched_rule_id = fallback_rule.get("rule-id", "") or next(
+                    (rule_id for rule_id, rule in rules.items() if rule is fallback_rule),
+                    "",
+                )
+                fallback_used = True
                 RULE_FALLBACK_TOTAL.labels(intent=intent, recommended_method=recommended_method).inc()
+                RULE_RETRIEVAL_TOTAL.labels(intent=intent, status="fallback_match").inc()
             else:
                 target_slot_prefix = self._resolve_slot_prefix(intent, {})
                 recommended_method = unknown_sentinel
                 rationale = unknown_sentinel
                 RULE_NO_MATCH_TOTAL.labels(intent=intent).inc()
+                RULE_RETRIEVAL_TOTAL.labels(intent=intent, status="no_match").inc()
         else:
             target_slot_prefix = locals().get("target_slot_prefix", self._resolve_slot_prefix(intent, {}))
 
         traceability_status = "traceable" if rationale and rationale != unknown_sentinel else "untraceable"
         RULE_TRACEABILITY_TOTAL.labels(intent=intent, status=traceability_status).inc()
 
-        return self._create_success(data={
-            f"{target_slot_prefix}.recommended-method": recommended_method,
-            f"{target_slot_prefix}.rule-rationale": rationale,
-            "rules-evaluated": "true"
-        })
+        return self._create_success(
+            data={
+                f"{target_slot_prefix}.recommended-method": recommended_method,
+                f"{target_slot_prefix}.rule-rationale": rationale,
+                "rules-evaluated": "true",
+            },
+            metadata={
+                "matched_rule_id": matched_rule_id,
+                "fallback_used": fallback_used,
+                "evaluated_rule_count": len(evaluated_rule_ids),
+                "evaluated_rule_ids": evaluated_rule_ids,
+                "rationale": rationale,
+                "traceability_status": traceability_status,
+            },
+        )
