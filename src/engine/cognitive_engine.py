@@ -72,6 +72,16 @@ AGENT_SLOT_OVERWRITE_TOTAL = Counter(
     "Total number of times a populated slot was overwritten with a new value.",
     ["slot_name", "source"],
 )
+AGENT_CONSTRAINT_VIOLATION_TOTAL = Counter(
+    "agent_constraint_violation_total",
+    "Total number of symbolic constraint violations (e.g., illegal state transitions).",
+    ["violation_type", "slot_name"]
+)
+AGENT_FAITHFULNESS_SCORE = Counter(
+    "agent_faithfulness_total",
+    "Total number of slot updates that are traceably faithful to symbolic rules.",
+    ["source"]
+)
 
 class CognitiveEngine:
     def __init__(self, parser, decoder, encoder, tool_executor):
@@ -106,12 +116,23 @@ class CognitiveEngine:
 
     def _apply_slot_update(self, slot_name: str, value: str, source: str) -> None:
         previous_value = self.slots.get(slot_name, self.unknown_sentinel)
+        
+        # Faithfulness check: Is the update coming from a sanctioned symbolic source?
+        symbolic_sources = {"tool", "orchestration", "nlu", "impasse", "impasse_reset", "target_input"}
+        if source in symbolic_sources or source.startswith("chained:") or source.startswith("tool:"):
+            AGENT_FAITHFULNESS_SCORE.labels(source=source).inc()
+
         if (
             previous_value != self.unknown_sentinel
             and value != self.unknown_sentinel
             and previous_value != value
         ):
             AGENT_SLOT_OVERWRITE_TOTAL.labels(slot_name=slot_name, source=source).inc()
+            # CVR check: Unauthorized overwrite of a known slot is a constraint violation
+            AGENT_CONSTRAINT_VIOLATION_TOTAL.labels(
+                violation_type="unauthorized_overwrite", 
+                slot_name=slot_name
+            ).inc()
 
         self.slots[slot_name] = value
         AGENT_SLOT_UPDATES_TOTAL.labels(source=source, slot_name=slot_name).inc()

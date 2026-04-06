@@ -3,6 +3,7 @@ import json
 import logging
 import re
 import dspy
+import tiktoken
 from pydantic import ValidationError
 from dotenv import load_dotenv
 from langfuse import observe
@@ -21,6 +22,16 @@ LLM_LATENCY_SECONDS = Histogram(
     'llm_latency_seconds', 
     'Latency of LLM calls in seconds', 
     ['model', 'utterance_type']
+)
+LLM_TOKEN_USAGE_TOTAL = Counter(
+    'llm_token_usage_total',
+    'Total number of tokens consumed by the LLM.',
+    ['model', 'utterance_type', 'token_type']  # token_type: prompt, completion
+)
+LLM_ESTIMATED_COST_USD = Counter(
+    'llm_estimated_cost_usd',
+    'Estimated cost of LLM calls in USD.',
+    ['model']
 )
 LLM_EXTRACTED_FIELDS_TOTAL = PromCounter(
     "llm_extracted_fields_total",
@@ -96,6 +107,12 @@ class GenericClassifier:
         )
         self.unknown_sentinel = self.parser.unknown_sentinel
 
+        # Initialize Tokenizer for FinOps
+        try:
+            self.tokenizer = tiktoken.get_encoding("cl100k_base")
+        except Exception:
+            self.tokenizer = tiktoken.encoding_for_model("gpt-4o") # Fallback
+
     def _load_examples(self) -> dict[str, list[dspy.Example]]:
         examples_by_type: dict[str, list[dspy.Example]] = {}
 
@@ -168,6 +185,24 @@ class GenericClassifier:
 
         return json.loads(json_str)
 
+    def _estimate_token_cost(self, prompt_tokens: int, completion_tokens: int):
+        # Estimated NVIDIA API cost for Phi-3.5: $0.05 / 1M prompt, $0.15 / 1M completion
+        cost = (prompt_tokens * 0.05 / 1_000_000) + (completion_tokens * 0.15 / 1_000_000)
+        LLM_ESTIMATED_COST_USD.labels(model=self.model_name).inc(cost)
+
+    def _log_token_usage(self, utterance_type: str, prompt_tokens: int, completion_tokens: int):
+        LLM_TOKEN_USAGE_TOTAL.labels(
+            model=self.model_name, 
+            utterance_type=utterance_type, 
+            token_type="prompt"
+        ).inc(prompt_tokens)
+        LLM_TOKEN_USAGE_TOTAL.labels(
+            model=self.model_name, 
+            utterance_type=utterance_type, 
+            token_type="completion"
+        ).inc(completion_tokens)
+        self._estimate_token_cost(prompt_tokens, completion_tokens)
+
     @observe(name="decoder_classify", as_type="generation", capture_input=False, capture_output=False)
     def classify(self, user_input: str, utterance_type: str, slots_to_extract: list, slot_values: dict = None) -> dict:
         if utterance_type not in self.models_module.MODELS:
@@ -226,6 +261,12 @@ class GenericClassifier:
             LLM_LATENCY_SECONDS.labels(model=self.model_name, utterance_type=utterance_type).observe(latency)
             LLM_CALLS_TOTAL.labels(model=self.model_name, utterance_type=utterance_type, status='success').inc()
             
+            # Count Tokens
+            prompt_str = f"{agent_context} {state_str} {scoped_instruction} {schema_json} {user_input}"
+            p_tokens = len(self.tokenizer.encode(prompt_str))
+            c_tokens = len(self.tokenizer.encode(result.output))
+            self._log_token_usage(utterance_type, p_tokens, c_tokens)
+
             dict_out = self._extract_json_object(result.output)
             
             # Validate

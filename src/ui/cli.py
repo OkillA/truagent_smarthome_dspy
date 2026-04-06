@@ -1,6 +1,8 @@
 import os
 import logging
 import uuid
+import time
+import pynvml
 
 from generators.csv_parser import CSVParser
 from generators.config_validator import validate_or_raise
@@ -11,7 +13,13 @@ from src.tools.registry import ToolRegistry
 from src.tools.executor import ToolExecutor
 from src.engine.cognitive_engine import CognitiveEngine
 from prometheus_client import REGISTRY, start_http_server, Counter, Histogram, Summary, Gauge, push_to_gateway
-import time
+
+# Hardware Metrics
+HARDWARE_GPU_VRAM_BYTES = Gauge(
+    "hardware_gpu_vram_used_bytes",
+    "Amount of GPU VRAM currently in use.",
+    ["device_id"]
+)
 
 # Macro-Level Metrics
 AGENT_SESSION_TOTAL = Counter(
@@ -78,6 +86,26 @@ class AgentRunner:
         self.turn_count = 0
         AGENT_SESSION_TOTAL.labels(status='started').inc()
 
+        # Init Hardware Monitoring
+        self.pynvml_available = False
+        try:
+            pynvml.nvmlInit()
+            self.pynvml_available = True
+        except Exception:
+            logging.debug("NVIDIA GPU monitoring not available.")
+
+    def _refresh_hardware_metrics(self):
+        if not self.pynvml_available:
+            return
+        try:
+            device_count = pynvml.nvmlDeviceGetCount()
+            for i in range(device_count):
+                handle = pynvml.nvmlDeviceGetHandleByIndex(i)
+                info = pynvml.nvmlDeviceGetMemoryInfo(handle)
+                HARDWARE_GPU_VRAM_BYTES.labels(device_id=str(i)).set(info.used)
+        except Exception as e:
+            logging.debug(f"Failed to refresh GPU metrics: {e}")
+
     def run(self):
         print("Initializing Smart Home Configuration Agent...\n")
         print(f"Prometheus metrics available at http://localhost:{DEFAULT_METRICS_PORT}/metrics\n")
@@ -96,6 +124,7 @@ class AgentRunner:
 
         try:
             while True:
+                self._refresh_hardware_metrics()
                 if self.engine.slots.get('task-complete') == 'yes':
                     print("Task marked as complete. Halting.")
                     AGENT_TASK_SUCCESS_TOTAL.inc()
