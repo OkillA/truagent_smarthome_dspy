@@ -55,11 +55,23 @@ Generated models are written to [`src/generated/conversation_models.py`](./src/g
 
 The runtime lives in [`src/`](./src):
 
-- [`src/engine/cognitive_engine.py`](./src/engine/cognitive_engine.py): SOAR-inspired propose/select/apply loop
+- [`src/soar/controller.py`](./src/soar/controller.py): Soar-like cycle coordinator around the compatibility engine
+- [`src/soar/io_manager.py`](./src/soar/io_manager.py): input/output boundary for user turns and agent messages
+- [`src/engine/cognitive_engine.py`](./src/engine/cognitive_engine.py): compatibility runtime preserving the current CLI behavior
+- [`src/engine/control.py`](./src/engine/control.py): explicit execution control state projected into working memory
+- [`src/engine/goals.py`](./src/engine/goals.py): current goal, subgoal, and impasse depth projection into working memory
+- [`src/engine/operator_handler.py`](./src/engine/operator_handler.py): generic execution layer for orchestration, NLU, and action operators
+- [`src/engine/runtime_model.py`](./src/engine/runtime_model.py): config-derived phase ordering, goal labels, and intent-domain routing
+- [`src/engine/working_memory.py`](./src/engine/working_memory.py): WME-backed working memory with slot projection
+- [`src/engine/productions.py`](./src/engine/productions.py): production compilation, matching, and preference resolution
+- [`src/engine/impasse.py`](./src/engine/impasse.py): explicit impasse and substate tracking
+- [`src/engine/tracing.py`](./src/engine/tracing.py): structured trace event recording
 - [`src/conversation/decoder.py`](./src/conversation/decoder.py): DSPy-based structured extraction
+- [`src/conversation/classifier_pipeline.py`](./src/conversation/classifier_pipeline.py): decoder prompt/schema/parsing/validation helpers
 - [`src/conversation/encoder.py`](./src/conversation/encoder.py): template-based NLG
 - [`src/tools/plugins/rule_evaluator.py`](./src/tools/plugins/rule_evaluator.py): deterministic recommendation engine
-- [`src/ui/cli.py`](./src/ui/cli.py): local CLI runner
+- [`src/ui/agent_runner.py`](./src/ui/agent_runner.py): UI-agnostic session runner
+- [`src/ui/cli.py`](./src/ui/cli.py): thin terminal entrypoint
 
 ### 4. Evaluation and Observability
 
@@ -162,6 +174,9 @@ Why Pushgateway is used:
 
 ## Key Metrics Currently Implemented
 
+The runtime adapts SOAR-inspired research metrics to this repo's actual architecture.
+It does not expose synthetic kernel-only metrics for subsystems that do not exist here.
+
 ### Outcome / UX
 
 - session success rate
@@ -181,6 +196,11 @@ Why Pushgateway is used:
 - traceable decision rate
 - handshake failures
 - working-memory slot and payload size
+- working-memory churn and peak known-slot growth
+- cycles since last tool execution
+- cycles since last meaningful progress
+- constraint violation counters for invalid values, single-slot overwrites, and phase regression
+- structured causal traces for recommendation decisions
 
 ### Runtime / Tooling
 
@@ -190,6 +210,25 @@ Why Pushgateway is used:
 - impasse metrics
 - decoder scope mix
 - LLM latency and extraction metrics
+- NLG template generation latency
+- prompt and completion token usage
+- estimated LLM cost per session
+
+## Metric Semantics
+
+| Requested Research Metric | Repo Metric / Status |
+| --- | --- |
+| Decision Cycle Time | Implemented as `agent_decision_cycle_seconds` |
+| WME Count | Adapted as working-memory slot counts, payload bytes, churn, and peak known-slot growth |
+| Extraction Strategy / Output Link Velocity | Adapted as cycles since last tool execution and cycles since last progress |
+| Constraint Violation Rate | Implemented as `agent_constraint_violation_total` |
+| Faithfulness / Causal Tracing | Implemented as structured rule-evaluator metadata plus `agent_causal_trace_total` and `agent_decision_trace_total` |
+| NLG Detokenization Time | Implemented as `agent_nlg_generation_seconds` for template rendering |
+| Cost per Run | Implemented as prompt/completion token totals plus `agent_session_estimated_cost_usd` |
+| Rete Match Time | Deferred; no Rete matcher in this runtime |
+| SQLite Footprint / SMEM / EpMem | Deferred; no SQLite-backed memory stores in this runtime |
+| Goal Stack Depth / Chunking / Retrieval Precision | Deferred; no substate stack, rule learning, or SMEM retrieval layer in this runtime |
+| GPU VRAM / TPS / Queue Depth | Deferred; current runtime uses remote inference in a single-session CLI |
 
 ## Spec-Driven Progress
 
@@ -221,6 +260,8 @@ The biggest remaining areas to improve are:
 - making rule explainability more structured with explicit rule ids
 - further hardening interruption recovery in messy conversations
 - eventually moving from a short-lived CLI runtime to a longer-lived service model
+
+The concrete remaining path toward a stronger Soar-style runtime is documented in [`SOAR_MIGRATION.md`](./SOAR_MIGRATION.md).
 
 ## Extra Notes
 

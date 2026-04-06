@@ -1,13 +1,18 @@
 import os
 import json
 import logging
-import re
 import dspy
+import tiktoken
 from pydantic import ValidationError
 from dotenv import load_dotenv
 from langfuse import observe
 from prometheus_client import Counter, Histogram, Counter as PromCounter
 import time
+from .classifier_pipeline import (
+    ClassifierOutputParser,
+    ClassifierValidator,
+    SchemaScopeBuilder,
+)
 
 load_dotenv()
 
@@ -21,6 +26,16 @@ LLM_LATENCY_SECONDS = Histogram(
     'llm_latency_seconds', 
     'Latency of LLM calls in seconds', 
     ['model', 'utterance_type']
+)
+LLM_TOKEN_USAGE_TOTAL = Counter(
+    "llm_token_usage_total",
+    "Total number of tokens consumed by the LLM.",
+    ["model", "utterance_type", "token_type"],
+)
+LLM_ESTIMATED_COST_USD = Counter(
+    "llm_estimated_cost_usd",
+    "Estimated cost of LLM calls in USD.",
+    ["model"],
 )
 LLM_EXTRACTED_FIELDS_TOTAL = PromCounter(
     "llm_extracted_fields_total",
@@ -46,6 +61,11 @@ LLM_CONTEXT_PAYLOAD_BYTES = Histogram(
     "llm_context_payload_bytes",
     "Approximate serialized size of the classifier state payload in bytes.",
     ["utterance_type"],
+)
+LLM_TOKENS_PER_SECOND = Histogram(
+    "llm_tokens_per_second",
+    "Approximate token throughput computed from prompt+completion tokens over end-to-end classifier latency.",
+    ["model", "utterance_type", "token_scope"],
 )
 
 # Define the DSPy Signature with 'state' for short-term memory
@@ -95,6 +115,22 @@ class GenericClassifier:
             self.parser.agent_config.get("debug_extractions", "false").strip().lower() == "true"
         )
         self.unknown_sentinel = self.parser.unknown_sentinel
+        self.prompt_cost_per_million = float(
+            self.parser.agent_config.get("llm_cost_per_million_prompt_tokens", "0.05")
+        )
+        self.completion_cost_per_million = float(
+            self.parser.agent_config.get("llm_cost_per_million_completion_tokens", "0.15")
+        )
+        self.total_prompt_tokens = 0
+        self.total_completion_tokens = 0
+        self.total_estimated_cost_usd = 0.0
+        self.schema_builder = SchemaScopeBuilder()
+        self.output_parser = ClassifierOutputParser()
+        self.validator = ClassifierValidator()
+        try:
+            self.tokenizer = tiktoken.encoding_for_model("gpt-4o")
+        except Exception:
+            self.tokenizer = tiktoken.get_encoding("cl100k_base")
 
     def _load_examples(self) -> dict[str, list[dspy.Example]]:
         examples_by_type: dict[str, list[dspy.Example]] = {}
@@ -114,59 +150,65 @@ class GenericClassifier:
         return examples_by_type
 
     def _slot_to_field_name(self, slot_name: str) -> str:
-        return slot_name.split('.')[-1].replace('-', '_')
+        return self.schema_builder.slot_to_field_name(slot_name)
 
     def _build_schema_for_slots(self, model_class, slots_to_extract: list[str]) -> str:
-        full_schema = model_class.model_json_schema()
-        properties = full_schema.get("properties", {})
-
-        if not slots_to_extract:
-            return json.dumps(full_schema)
-
-        target_fields = []
-        for slot_name in slots_to_extract:
-            field_name = self._slot_to_field_name(slot_name)
-            if field_name in properties and field_name not in target_fields:
-                target_fields.append(field_name)
-
-        if not target_fields:
-            return json.dumps(full_schema)
-
-        scoped_schema = {
-            "type": "object",
-            "properties": {field_name: properties[field_name] for field_name in target_fields},
-        }
-        return json.dumps(scoped_schema)
+        return self.schema_builder.build_schema_for_slots(model_class, slots_to_extract)
 
     def _allowed_values_for_utterance_type(self, utterance_type: str) -> dict[str, set[str]]:
-        allowed_values: dict[str, set[str]] = {}
-        for slot in self.parser.decoder_slots:
-            if slot.utterance_type != utterance_type:
-                continue
-
-            field_name = self._slot_to_field_name(slot.slot_name)
-            values = {
-                value.strip()
-                for value in slot.accepted_values.split("|")
-                if value.strip()
-            }
-            if values:
-                allowed_values[field_name] = values
-
-        return allowed_values
+        return self.validator.allowed_values_for_utterance_type(self.parser, utterance_type)
 
     def _extract_json_object(self, raw_output: str) -> dict:
-        json_str = raw_output.strip()
-        if "```json" in json_str:
-            json_str = json_str.split("```json", 1)[1].split("```", 1)[0].strip()
-        elif "```" in json_str:
-            json_str = json_str.split("```", 1)[1].split("```", 1)[0].strip()
-        else:
-            match = re.search(r"\{.*\}", json_str, re.DOTALL)
-            if match:
-                json_str = match.group(0)
+        return self.output_parser.extract_json_object(raw_output)
 
-        return json.loads(json_str)
+    def _estimate_token_cost(self, prompt_tokens: int, completion_tokens: int) -> float:
+        return (
+            prompt_tokens * self.prompt_cost_per_million / 1_000_000
+            + completion_tokens * self.completion_cost_per_million / 1_000_000
+        )
+
+    def _record_token_usage(
+        self,
+        utterance_type: str,
+        prompt_tokens: int,
+        completion_tokens: int,
+        latency_seconds: float | None = None,
+    ) -> None:
+        LLM_TOKEN_USAGE_TOTAL.labels(
+            model=self.model_name,
+            utterance_type=utterance_type,
+            token_type="prompt",
+        ).inc(prompt_tokens)
+        LLM_TOKEN_USAGE_TOTAL.labels(
+            model=self.model_name,
+            utterance_type=utterance_type,
+            token_type="completion",
+        ).inc(completion_tokens)
+        estimated_cost = self._estimate_token_cost(prompt_tokens, completion_tokens)
+        LLM_ESTIMATED_COST_USD.labels(model=self.model_name).inc(estimated_cost)
+        self.total_prompt_tokens += prompt_tokens
+        self.total_completion_tokens += completion_tokens
+        self.total_estimated_cost_usd += estimated_cost
+        if latency_seconds and latency_seconds > 0:
+            total_tokens = prompt_tokens + completion_tokens
+            LLM_TOKENS_PER_SECOND.labels(
+                model=self.model_name,
+                utterance_type=utterance_type,
+                token_scope="total",
+            ).observe(total_tokens / latency_seconds)
+            if completion_tokens > 0:
+                LLM_TOKENS_PER_SECOND.labels(
+                    model=self.model_name,
+                    utterance_type=utterance_type,
+                    token_scope="completion",
+                ).observe(completion_tokens / latency_seconds)
+
+    def usage_snapshot(self) -> dict[str, float]:
+        return {
+            "prompt_tokens": self.total_prompt_tokens,
+            "completion_tokens": self.total_completion_tokens,
+            "estimated_cost_usd": self.total_estimated_cost_usd,
+        }
 
     @observe(name="decoder_classify", as_type="generation", capture_input=False, capture_output=False)
     def classify(self, user_input: str, utterance_type: str, slots_to_extract: list, slot_values: dict = None) -> dict:
@@ -180,17 +222,7 @@ class GenericClassifier:
 
         scope_hint = ""
         if slots_to_extract:
-            field_names = []
-            for slot_name in slots_to_extract:
-                field_name = self._slot_to_field_name(slot_name)
-                if field_name not in field_names:
-                    field_names.append(field_name)
-            if field_names:
-                scope_hint = (
-                    "Only extract values for these fields if they are explicitly stated in the user input: "
-                    + ", ".join(field_names)
-                    + "."
-                )
+            scope_hint = self.schema_builder.scope_hint(slots_to_extract)
 
         strictness_hint = (
             " Extract only information that is directly and explicitly stated in the user's message."
@@ -225,11 +257,20 @@ class GenericClassifier:
             latency = time.time() - start_time
             LLM_LATENCY_SECONDS.labels(model=self.model_name, utterance_type=utterance_type).observe(latency)
             LLM_CALLS_TOTAL.labels(model=self.model_name, utterance_type=utterance_type, status='success').inc()
+            prompt_str = f"{agent_context} {state_str} {scoped_instruction} {schema_json} {user_input}"
+            prompt_tokens = len(self.tokenizer.encode(prompt_str))
+            completion_tokens = len(self.tokenizer.encode(result.output))
+            self._record_token_usage(
+                utterance_type,
+                prompt_tokens,
+                completion_tokens,
+                latency_seconds=latency,
+            )
             
             dict_out = self._extract_json_object(result.output)
             
             # Validate
-            validated = ModelClass(**dict_out)
+            validated = self.validator.validate(ModelClass, dict_out)
             final_dict = validated.model_dump()
             
             if self.debug_extractions:
@@ -263,20 +304,11 @@ class GenericClassifier:
             return final_result
 
         except ValidationError as e:
-            allowed_values = self._allowed_values_for_utterance_type(utterance_type)
-            for error in e.errors():
-                field_name = error.get("loc", ["unknown"])[0]
-                bad_value = dict_out.get(field_name) if isinstance(dict_out, dict) else None
-                if field_name in allowed_values and bad_value not in allowed_values[field_name]:
-                    LLM_HANDSHAKE_FAILURE_TOTAL.labels(
-                        utterance_type=utterance_type,
-                        reason="invalid_enum",
-                    ).inc()
-                else:
-                    LLM_HANDSHAKE_FAILURE_TOTAL.labels(
-                        utterance_type=utterance_type,
-                        reason="validation_error",
-                    ).inc()
+            for reason in self.validator.translate_validation_error(self.parser, utterance_type, e, dict_out):
+                LLM_HANDSHAKE_FAILURE_TOTAL.labels(
+                    utterance_type=utterance_type,
+                    reason=reason,
+                ).inc()
 
             LLM_CALLS_TOTAL.labels(model=self.model_name, utterance_type=utterance_type, status='error').inc()
             logging.error(f"DSPy Validation failed: {e}")
